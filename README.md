@@ -65,6 +65,17 @@ Reopen terminal; verify with `unity --version`. Update with `unity upgrade`.
 | `references/connectivity-and-setup.md` | Port descriptors, port ranges, token rotation, endpoints, dev-Player server setup, log locations |
 | `references/extending.md` | Custom `[CliCommand]` authoring, authoring contract, hot-reload authoring, test architecture |
 
+## Tested with
+
+| Component | Version |
+|---|---|
+| Unity Editor | 6000.3.13f1 (Unity 6) |
+| Unity CLI | 1.0.0-beta.2 |
+| `com.unity.pipeline` | 0.3.1-exp.1 |
+| OS | Windows 11 Pro |
+
+Both the CLI and the package are experimental betas; expect drift. `unity command` / `GET /api/commands` reflect the installed version.
+
 ## Notes
 
 - `com.unity.pipeline` is experimental; commands change between versions. `unity command` / `GET /api/commands` is the source of truth for the installed version.

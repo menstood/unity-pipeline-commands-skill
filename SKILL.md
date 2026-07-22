@@ -1,6 +1,6 @@
 ---
 name: unity-pipeline-commands
-description: Control a running Unity Editor (or development Player) from the CLI via the com.unity.pipeline HTTP API — run commands to edit scenes/assets/prefabs, enter play mode, take screenshots, read console logs, recompile, run tests, build, eval C#, and hot-reload code. Use whenever the user wants to drive, inspect, or automate the Unity Editor from Claude Code.
+description: Control a running Unity Editor (or development Player) via the com.unity.pipeline HTTP API and the unity CLI — edit scenes/assets/prefabs, enter play mode, take screenshots, read console logs, recompile, run tests, build, eval C#, hot-reload code. Use when the task requires interacting with a live Unity Editor or Player; NOT for general Unity coding questions that don't need a running Editor.
 ---
 
 # Unity CLI (com.unity.pipeline) — drive the Unity Editor over HTTP
@@ -9,7 +9,7 @@ The **`com.unity.pipeline`** package (v0.3.x, experimental) runs a local HTTP se
 
 ## Prerequisite: package installed?
 
-Check `Packages/manifest.json` for `"com.unity.pipeline"`. If missing, install it: `unity pipeline install` (with the Unity CLI), or Package Manager → *Install package by name* → `com.unity.pipeline` (version blank = latest). The Editor must be **running with the project open** for the server to exist.
+Check `Packages/manifest.json` for `"com.unity.pipeline"`. If missing, **report it and ask before installing** — installing edits the manifest and triggers a domain reload. (Options once approved: `unity pipeline install` with the CLI, or Package Manager → *Install package by name* → `com.unity.pipeline`, version blank = latest.) The Editor must be **running with the project open** for the server to exist.
 
 ## Connecting (do this first, every session)
 
@@ -20,6 +20,16 @@ Check `Packages/manifest.json` for `"com.unity.pipeline"`. If missing, install i
 3. Call `http://127.0.0.1:<port>/...` with header `Authorization: Bearer <evalToken>`. Always use `127.0.0.1`, not `localhost` (IPv6 pitfalls). Missing/wrong token → `401`.
 
 Ports: Editor 7800–7849 (tests 7850–7899), Runtime 7900–7949 (tests 7950–7999). Token is 256-bit CSPRNG, base64, **regenerated after every domain reload** — re-read the descriptor after any recompile/package change.
+
+**Treat `evalToken` as a secret:** never print, log, or commit it (descriptors live under `Library/`, which Unity projects git-ignore); read it only to build the auth header and re-read after reloads instead of storing it.
+
+### Project identity check (before any mutation)
+
+A reachable server + valid token does NOT prove you're talking to the right project. Before the first mutating command:
+
+1. Confirm the descriptor's `projectPath` matches the project root you're working in.
+2. Confirm `pid` is alive and `lastHeartbeat` is recent — a stale descriptor means a dead Editor.
+3. With multiple Editors open, target explicitly (`unity command --project-path <path> ...`); never mutate when identity is ambiguous.
 
 ### Endpoints
 
@@ -42,7 +52,7 @@ Invoke-RestMethod -Uri "http://127.0.0.1:$($d.port)/api/exec" -Method Post -Head
 
 ### The `unity` CLI — prefer this when installed (verified with v1.0.0-beta.2)
 
-Check with `unity --version`. The CLI does port/token discovery itself — no descriptor reading, no 401-after-domain-reload handling:
+Run `unity --version` at session start — the CLI is an experimental beta and behavior shifts between releases; `unity --help` and bare `unity command` are the source of truth for the installed version. The CLI does port/token discovery itself — no descriptor reading, no 401-after-domain-reload handling:
 
 ```
 unity pipeline list                                 # projects + server port + reachability
@@ -57,7 +67,7 @@ unity command --runtime-path "C:\Builds\MyGame" runtime_status
 Verified CLI behaviors:
 - ObjectRef args take inline JSON — in PowerShell wrap in **single quotes with no backslash escapes**: `--target '{"hierarchyPath":"/Foo"}'` (escaped `\"` inside single quotes passes literal backslashes and breaks resolution).
 - A **plain string** for an ObjectRef param is treated as a hierarchyPath shorthand: `--target '/Foo'`.
-- Output is tab-separated `Command  Success  Result  Parameters` with JSON in the Result column; a failed command prints `Error:` lines and exits with code 6.
+- For machine parsing prefer `--format json --no-banner` over the default human/tab layout; treat any non-zero exit code as failure and read stderr. (Observed with v1.0.0-beta.2: default output is tab-separated `Command  Success  Result  Parameters`; failures print `Error:` lines and exit 6.)
 
 Fall back to the raw HTTP recipe above only when the CLI isn't installed.
 
@@ -69,7 +79,9 @@ Every command returns a `CommandExecutionResponse`: `{ success: bool, command: s
 
 Any param typed as a reference accepts ONE of: `{"globalId": "..."}`, `{"path": "Assets/Foo.mat"}`, `{"guid": "...", "fileId": ...}`, `{"instanceId": 12345}`, `{"hierarchyPath": "/Root/Child"}`.
 
-## Safety conventions (uniform across all mutating commands)
+## Safety conventions
+
+`confirm`/`dry_run` are **command-level conventions, not a global guarantee** — non-destructive commands and custom `[CliCommand]`s may implement neither. Check the command's schema (`unity command` / `GET /api/commands`) before relying on them.
 
 - `dry_run: true` → validate + preview, mutate **nothing** (wins even if `confirm` is also true).
 - `confirm: false` (default) on destructive/overwriting commands → command **refuses**; pass `confirm: true` to apply.
@@ -101,7 +113,7 @@ If the Editor is unfocused/minimized it may stop ticking — call `set_autotick`
 - **Run the test suite:** `run_tests --mode editor --filter <name>` (or `async_tests:true` + poll `test_status`).
 - **See what the scene looks like:** `screenshot` (game/scene view) or `capture_game_view` (returns base64 PNG, params width/height/camera/save_path).
 - **Inspect a scene:** `get_scene_hierarchy` → nodes carry `instanceId`+`hierarchyPath` → feed into `get_component_properties` / `set_component_properties`.
-- **Escape hatch:** `eval --code "<C#>"` runs arbitrary C# via Roslyn (5s default timeout); `eval_file` for a `.cs` file; `menu --path "Assets/Reimport All"` runs any menu item (omit path to list all).
+- **Escape hatch:** `eval --code "<C#>"` runs arbitrary C# via Roslyn (5s default timeout); `eval_file` for a `.cs` file; `menu --path "Assets/Reimport All"` runs any menu item (omit path to list all). Policy: prefer a registered command when one exists; use `eval` primarily for read-only inspection; ask before eval/menu calls that write files, start processes, or touch the network; verify the effect afterwards.
 
 ## Field-tested gotchas (verified on this project, 2026-07)
 

@@ -116,6 +116,8 @@ Management commands (settings/builds/packages) are lighter: unconfined paths all
 
 Apply edited C# to running code without restarting Play mode or rebuilding. **Editor Play Mode + Mono standalone dev builds only — never IL2CPP.**
 
+> Note: Unity's docs state `[HotReload]` methods must be **public** void instance methods, yet Unity's own samples use default-private methods. Until verified otherwise, follow the stated rule — examples below use `public`.
+
 ### Flavor 1 — in-place (`reload_file`)
 
 Tag methods `[HotReload]` (must be **public void instance** methods), edit the body, then:
@@ -132,7 +134,7 @@ public class Spinner : MonoBehaviour
     public float rotationSpeed = 90f;
 
     [HotReload]
-    void Update() => transform.Rotate(Vector3.up, rotationSpeed * Time.deltaTime);
+    public void Update() => transform.Rotate(Vector3.up, rotationSpeed * Time.deltaTime);
 }
 ```
 
@@ -146,7 +148,7 @@ Tag `[HotReloadWithOverrides]` and route through the helper; overrides live in a
 public class BossController : MonoBehaviour
 {
     [HotReloadWithOverrides]
-    void Update() => HotReloadHelper.ExecuteWithHotReload(this, "Update", OriginalUpdate);
+    public void Update() => HotReloadHelper.ExecuteWithHotReload(this, "Update", OriginalUpdate);
     public void OriginalUpdate() => transform.Rotate(45 * Time.deltaTime, 0, 0);
 }
 
