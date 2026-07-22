@@ -40,14 +40,25 @@ Invoke-RestMethod -Uri "http://127.0.0.1:$($d.port)/api/exec" -Method Post -Head
   -Body (@{ command = 'editor_status'; parameters = @{} } | ConvertTo-Json -Depth 10)
 ```
 
-### The `unity` CLI (if installed)
+### The `unity` CLI — prefer this when installed (verified with v1.0.0-beta.2)
+
+Check with `unity --version`. The CLI does port/token discovery itself — no descriptor reading, no 401-after-domain-reload handling:
 
 ```
-unity command <name> [--arg value ...]              # editor of current project
+unity pipeline list                                 # projects + server port + reachability
+unity command <name> [--arg value ...]              # run any command, e.g.:
+unity command find_assets --type SceneAsset --name Init
 unity command --project-path <path> <name> ...      # explicit project
 unity command --runtime MyGame.exe runtime_status   # attach to a dev Player
 unity command --runtime-path "C:\Builds\MyGame" runtime_status
 ```
+
+Verified CLI behaviors:
+- ObjectRef args take inline JSON — in PowerShell wrap in **single quotes with no backslash escapes**: `--target '{"hierarchyPath":"/Foo"}'` (escaped `\"` inside single quotes passes literal backslashes and breaks resolution).
+- A **plain string** for an ObjectRef param is treated as a hierarchyPath shorthand: `--target '/Foo'`.
+- Output is tab-separated `Command  Success  Result  Parameters` with JSON in the Result column; a failed command prints `Error:` lines and exits with code 6.
+
+Fall back to the raw HTTP recipe above only when the CLI isn't installed.
 
 ## Response envelope
 
