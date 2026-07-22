@@ -18,20 +18,20 @@ Distilled from the full [`com.unity.pipeline@0.3` manual](https://docs.unity3d.c
 Clone into your project's skills folder:
 
 ```bash
-git clone https://github.com/menstood/unity-cli-editor-skill.git .claude/skills/unity-cli
+git clone https://github.com/menstood/unity-cli-editor-skill.git .claude/skills/unity-cli-editor
 ```
 
 Or for all projects, into your user skills folder:
 
 ```bash
-git clone https://github.com/menstood/unity-cli-editor-skill.git ~/.claude/skills/unity-cli
+git clone https://github.com/menstood/unity-cli-editor-skill.git ~/.claude/skills/unity-cli-editor
 ```
 
 Then add the package to your Unity project (Unity 6+): Package Manager → *Add package by name* → `com.unity.pipeline` (e.g. `0.3.1-exp.1`). Keep the Editor running with the project open.
 
 ## Use
 
-In Claude Code, just ask for anything that touches the Editor ("run the tests", "screenshot the game view", "why doesn't my scene load") — or invoke explicitly with `/unity-cli`.
+In Claude Code, just ask for anything that touches the Editor ("run the tests", "screenshot the game view", "why doesn't my scene load") — or invoke explicitly with `/unity-cli-editor`.
 
 ## Contents
 
