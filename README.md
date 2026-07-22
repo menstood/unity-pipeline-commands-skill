@@ -42,8 +42,15 @@ unity pipeline list        # verify: "Pipeline: Installed"
 
 ### Unity CLI (optional)
 
+Windows (PowerShell):
+
+```powershell
+$env:UNITY_CLI_CHANNEL='beta'; irm https://public-cdn.cloud.unity3d.com/hub/prod/cli/install.ps1 | iex
+```
+
+macOS / Linux:
+
 ```bash
-# macOS / Linux (Windows: bash-capable shell, e.g. Git Bash)
 curl -fsSL https://public-cdn.cloud.unity3d.com/hub/prod/cli/install.sh | UNITY_CLI_CHANNEL=beta bash
 ```
 
