@@ -15,6 +15,8 @@ Distilled from the full [`com.unity.pipeline@0.3` manual](https://docs.unity3d.c
 
 ## Install
 
+### 1. The skill
+
 Clone into your project's skills folder:
 
 ```bash
@@ -27,7 +29,38 @@ Or for all projects, into your user skills folder:
 git clone https://github.com/menstood/unity-cli-editor-skill.git ~/.claude/skills/unity-cli-editor
 ```
 
-Then add the package to your Unity project (Unity 6+): Package Manager → *Add package by name* → `com.unity.pipeline` (e.g. `0.3.1-exp.1`). Keep the Editor running with the project open.
+### 2. The Unity CLI (optional, but gives you the `unity` command)
+
+The [Unity CLI](https://docs.unity.com/en-us/unity-cli) is a standalone experimental binary, independent of Unity Hub. Install per [Use the Unity CLI](https://docs.unity.com/en-us/unity-cli/use-unity-cli):
+
+```bash
+# macOS / Linux (Windows: run in a bash-capable shell such as Git Bash)
+curl -fsSL https://public-cdn.cloud.unity3d.com/hub/prod/cli/install.sh | UNITY_CLI_CHANNEL=beta bash
+```
+
+Then reopen your terminal and verify:
+
+```bash
+unity --version
+unity auth login      # sign in to your Unity account
+```
+
+Update later with `unity upgrade`.
+
+> The skill does not require the CLI — it talks to the same local HTTP API directly (see `SKILL.md` for the raw `curl`/PowerShell recipe). The CLI is just the nicest human front-end.
+
+### 3. The `com.unity.pipeline` package (required, Unity 6.0+)
+
+With the CLI, from your project folder while the project is open in the Editor:
+
+```bash
+unity pipeline install     # installs the package + dependencies into the project
+unity pipeline list        # verify — should report "Pipeline: Installed"
+```
+
+Or manually without the CLI: Package Manager → *Install package by name* → `com.unity.pipeline` (e.g. `0.3.1-exp.1`), or add `"com.unity.pipeline": "0.3.1-exp.1"` to `Packages/manifest.json`.
+
+Keep the Editor running with the project open — it starts the HTTP server and writes the port descriptor the skill connects to.
 
 ## Use
 
