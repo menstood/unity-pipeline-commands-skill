@@ -46,6 +46,7 @@ Check with `unity --version`. The CLI does port/token discovery itself — no de
 
 ```
 unity pipeline list                                 # projects + server port + reachability
+unity command                                       # no name = list ALL commands with params (best discovery)
 unity command <name> [--arg value ...]              # run any command, e.g.:
 unity command find_assets --type SceneAsset --name Init
 unity command --project-path <path> <name> ...      # explicit project
