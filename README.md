@@ -51,14 +51,14 @@ Update later with `unity upgrade`.
 
 ### 3. The `com.unity.pipeline` package (required, Unity 6.0+)
 
-With the CLI, from your project folder while the project is open in the Editor:
+**Without the CLI** (works fine — the skill talks to the HTTP API directly): in the Unity Editor, Package Manager → *Install package by name* → `com.unity.pipeline` (e.g. `0.3.1-exp.1`), or add `"com.unity.pipeline": "0.3.1-exp.1"` to `Packages/manifest.json`.
+
+**With the CLI** (requires step 2), from your project folder while the project is open in the Editor:
 
 ```bash
 unity pipeline install     # installs the package + dependencies into the project
 unity pipeline list        # verify — should report "Pipeline: Installed"
 ```
-
-Or manually without the CLI: Package Manager → *Install package by name* → `com.unity.pipeline` (e.g. `0.3.1-exp.1`), or add `"com.unity.pipeline": "0.3.1-exp.1"` to `Packages/manifest.json`.
 
 Keep the Editor running with the project open — it starts the HTTP server and writes the port descriptor the skill connects to.
 
