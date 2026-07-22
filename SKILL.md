@@ -1,5 +1,5 @@
 ---
-name: unity-cli-editor
+name: unity-pipeline-commands
 description: Control a running Unity Editor (or development Player) from the CLI via the com.unity.pipeline HTTP API — run commands to edit scenes/assets/prefabs, enter play mode, take screenshots, read console logs, recompile, run tests, build, eval C#, and hot-reload code. Use whenever the user wants to drive, inspect, or automate the Unity Editor from Claude Code.
 ---
 

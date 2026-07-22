@@ -1,4 +1,4 @@
-# unity-cli-editor-skill
+# unity-pipeline-commands-skill
 
 Skill and command reference for controlling a running Unity Editor (or development Player) through the local HTTP API of the experimental [`com.unity.pipeline`](https://docs.unity3d.com/Packages/com.unity.pipeline@latest) package: scene/asset/prefab authoring, play mode, screenshots, console logs, recompile, tests, builds, project settings, packages, C# eval, hot reload.
 
@@ -17,13 +17,13 @@ Written for Claude Code (`SKILL.md` format), usable by any agent framework or hu
 Per project:
 
 ```bash
-git clone https://github.com/menstood/unity-cli-editor-skill.git .claude/skills/unity-cli-editor
+git clone https://github.com/menstood/unity-pipeline-commands-skill.git .claude/skills/unity-pipeline-commands
 ```
 
 Global (all projects):
 
 ```bash
-git clone https://github.com/menstood/unity-cli-editor-skill.git ~/.claude/skills/unity-cli-editor
+git clone https://github.com/menstood/unity-pipeline-commands-skill.git ~/.claude/skills/unity-pipeline-commands
 ```
 
 For non-Claude tooling, clone anywhere and point your agent at `SKILL.md`.
@@ -51,7 +51,7 @@ Reopen terminal; verify with `unity --version`. Update with `unity upgrade`.
 
 ## Usage
 
-- Claude Code: `/unity-cli-editor`, or any request that touches the Editor.
+- Claude Code: `/unity-pipeline-commands`, or any request that touches the Editor.
 - Unity CLI: `unity command` lists all commands; `unity command <name> [--arg value ...]` executes.
 - Raw HTTP: read `<project>/Library/Pipeline/.unity-pipeline-port` for port + token, then `POST http://127.0.0.1:<port>/api/exec` with `Authorization: Bearer <token>` and body `{"command":"<name>","parameters":{...}}`. Full recipe in `SKILL.md`.
 
