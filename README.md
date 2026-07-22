@@ -30,11 +30,7 @@ For non-Claude tooling, clone anywhere and point your agent at `SKILL.md`.
 
 ### `com.unity.pipeline` package
 
-Without the Unity CLI: **Window → Package Manager → + → Install package by name** → `com.unity.pipeline`, or add to `Packages/manifest.json`:
-
-```json
-"com.unity.pipeline": "0.3.1-exp.1"
-```
+Without the Unity CLI: **Window → Package Manager → + → Install package by name** → `com.unity.pipeline` (leave version blank to get the latest).
 
 With the Unity CLI, from the project folder while the project is open:
 

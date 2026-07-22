@@ -9,7 +9,7 @@ The **`com.unity.pipeline`** package (v0.3.x, experimental) runs a local HTTP se
 
 ## Prerequisite: package installed?
 
-Check `Packages/manifest.json` for `"com.unity.pipeline"`. If missing, add it (Package Manager → Add by name `com.unity.pipeline`, or add `"com.unity.pipeline": "0.3.1-exp.1"` to the manifest). The Editor must be **running with the project open** for the server to exist.
+Check `Packages/manifest.json` for `"com.unity.pipeline"`. If missing, install it: `unity pipeline install` (with the Unity CLI), or Package Manager → *Install package by name* → `com.unity.pipeline` (version blank = latest). The Editor must be **running with the project open** for the server to exist.
 
 ## Connecting (do this first, every session)
 
