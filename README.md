@@ -1,34 +1,42 @@
 # unity-pipeline-commands-skill
 
-Skill and command reference for controlling a running Unity Editor (or development Player) through the local HTTP API of the experimental [`com.unity.pipeline`](https://docs.unity3d.com/Packages/com.unity.pipeline@latest) package: scene/asset/prefab authoring, play mode, screenshots, console logs, recompile, tests, builds, project settings, packages, C# eval, hot reload.
+Agent skills for Unity work. Written for Claude Code (`SKILL.md` format), usable by any agent framework or human that reads markdown.
 
-Written for Claude Code (`SKILL.md` format), usable by any agent framework or human that reads markdown. `references/` doubles as a standalone API reference for the package, distilled from the full [`com.unity.pipeline@0.3` manual](https://docs.unity3d.com/Packages/com.unity.pipeline@0.3/manual/index.html) and corrected against a live Editor.
+| Skill | What it does |
+|---|---|
+| [`unity-pipeline-commands`](skills/unity-pipeline-commands/SKILL.md) | Control a running Unity Editor (or development Player) through the local HTTP API of the experimental [`com.unity.pipeline`](https://docs.unity3d.com/Packages/com.unity.pipeline@latest) package: scene/asset/prefab authoring, play mode, screenshots, console logs, recompile, tests, builds, project settings, packages, C# eval, hot reload. |
 
-## Requirements
+## Installation
+
+Clone once, then copy (or symlink) the skill folders you want into a skills directory: `.claude/skills/` per project, or `~/.claude/skills/` globally.
+
+```bash
+git clone https://github.com/menstood/unity-pipeline-commands-skill.git
+cp -r unity-pipeline-commands-skill/skills/unity-pipeline-commands .claude/skills/
+```
+
+Windows (PowerShell):
+
+```powershell
+git clone https://github.com/menstood/unity-pipeline-commands-skill.git
+Copy-Item -Recurse unity-pipeline-commands-skill\skills\unity-pipeline-commands .claude\skills\
+```
+
+For non-Claude tooling, point your agent at the skill's `SKILL.md`.
+
+---
+
+## unity-pipeline-commands
+
+`references/` doubles as a standalone API reference for the package, distilled from the full [`com.unity.pipeline@0.3` manual](https://docs.unity3d.com/Packages/com.unity.pipeline@0.3/manual/index.html) and corrected against a live Editor.
+
+### Requirements
 
 - Unity 6.0+, project open in a running Editor
 - `com.unity.pipeline` package installed in the project (below)
 - Optional: [Unity CLI](https://docs.unity.com/en-us/unity-cli) — preferred client when present; otherwise the HTTP API is called directly
 
-## Installation
-
-### Skill
-
-Per project:
-
-```bash
-git clone https://github.com/menstood/unity-pipeline-commands-skill.git .claude/skills/unity-pipeline-commands
-```
-
-Global (all projects):
-
-```bash
-git clone https://github.com/menstood/unity-pipeline-commands-skill.git ~/.claude/skills/unity-pipeline-commands
-```
-
-For non-Claude tooling, clone anywhere and point your agent at `SKILL.md`.
-
-### `com.unity.pipeline` package
+### Installing `com.unity.pipeline`
 
 Without the Unity CLI: **Window → Package Manager → + → Install package by name** → `com.unity.pipeline` (leave version blank to get the latest).
 
@@ -40,7 +48,7 @@ unity pipeline install
 unity pipeline list        # verify: "Pipeline: Installed"
 ```
 
-### Unity CLI (optional)
+### Installing the Unity CLI (optional)
 
 Windows (PowerShell):
 
@@ -56,13 +64,13 @@ curl -fsSL https://public-cdn.cloud.unity3d.com/hub/prod/cli/install.sh | UNITY_
 
 Reopen terminal; verify with `unity --version`. Update with `unity upgrade`.
 
-## Usage
+### Usage
 
 - Claude Code: `/unity-pipeline-commands`, or any request that touches the Editor.
 - Unity CLI: `unity command` lists all commands; `unity command <name> [--arg value ...]` executes.
-- Raw HTTP: read `<project>/Library/Pipeline/.unity-pipeline-port` for port + token, then `POST http://127.0.0.1:<port>/api/exec` with `Authorization: Bearer <token>` and body `{"command":"<name>","parameters":{...}}`. Full recipe in `SKILL.md`.
+- Raw HTTP: read `<project>/Library/Pipeline/.unity-pipeline-port` for port + token, then `POST http://127.0.0.1:<port>/api/exec` with `Authorization: Bearer <token>` and body `{"command":"<name>","parameters":{...}}`. Full recipe in its `SKILL.md`.
 
-## Contents
+### Contents
 
 | File | Contents |
 |---|---|
@@ -72,7 +80,7 @@ Reopen terminal; verify with `unity --version`. Update with `unity upgrade`.
 | `references/connectivity-and-setup.md` | Port descriptors, port ranges, token rotation, endpoints, dev-Player server setup, log locations |
 | `references/extending.md` | Custom `[CliCommand]` authoring, authoring contract, hot-reload authoring, test architecture |
 
-## Tested with
+### Tested with
 
 | Component | Version |
 |---|---|
@@ -83,7 +91,7 @@ Reopen terminal; verify with `unity --version`. Update with `unity upgrade`.
 
 Both the CLI and the package are experimental betas; expect drift. `unity command` / `GET /api/commands` reflect the installed version.
 
-## Notes
+### Notes
 
 - `com.unity.pipeline` is experimental; commands change between versions. `unity command` / `GET /api/commands` is the source of truth for the installed version.
 - Server binds `127.0.0.1` only, bearer-token auth; token rotates on every domain reload.
