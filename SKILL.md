@@ -3,7 +3,7 @@ name: unity-pipeline-commands
 description: Control a running Unity Editor (or development Player) via the com.unity.pipeline HTTP API and the unity CLI — edit scenes/assets/prefabs, enter play mode, take screenshots, read console logs, recompile, run tests, build, eval C#, hot-reload code. Use when the task requires interacting with a live Unity Editor or Player; NOT for general Unity coding questions that don't need a running Editor.
 ---
 
-# Unity CLI (com.unity.pipeline) — drive the Unity Editor over HTTP
+# Unity Pipeline Commands (com.unity.pipeline) — drive the Unity Editor over HTTP
 
 The **`com.unity.pipeline`** package (v0.3.x, experimental) runs a local HTTP server inside the Unity Editor (and optionally inside development Player builds). Clients — the `unity` CLI, CI, or this agent — execute registered commands against it. This is how you can *actually* compile, test, screenshot, and edit scenes without a human in the Editor.
 
