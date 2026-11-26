@@ -1,5 +1,13 @@
 # unity-pipeline-commands-skill
 
+> [!WARNING]
+> **Deprecated and no longer maintained.** Unity now ships an official CLI and an official `unity-pipeline` agent skill that cover what `unity-pipeline-commands` did, and they stay in step with each Unity release. Please use those instead:
+>
+> - Unity CLI docs: [Use the Unity CLI](https://docs.unity.com/en-us/unity-cli/use-unity-cli) · [Command reference](https://docs.unity.com/en-us/unity-cli/unity-cli-reference)
+> - Official agent skill: `unity upgrade`, then `unity pipeline install` in your project (installs the `unity-pipeline` skill), or `unity skill install <client> --skill unity-pipeline`
+>
+> The command syntax documented here targets the CLI 1.0 betas and Pipeline 0.9.x and may not match newer versions. The repository stays available, read-only, for reference.
+
 Agent skills for Unity work. Written for Claude Code (`SKILL.md` format), usable by any agent framework or human that reads markdown.
 
 | Skill | What it does |
