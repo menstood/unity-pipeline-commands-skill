@@ -28,7 +28,7 @@ For non-Claude tooling, point your agent at the skill's `SKILL.md`.
 
 ## unity-pipeline-commands
 
-`references/` doubles as a standalone API reference for the package, distilled from the full [`com.unity.pipeline@0.3` manual](https://docs.unity3d.com/Packages/com.unity.pipeline@0.3/manual/index.html) and corrected against a live Editor.
+Targets `com.unity.pipeline` **0.9.x**. `references/` doubles as a standalone API reference: the command tables are generated from a live 0.9.1 Editor's schema, and the connectivity/extending notes come from the package's bundled 0.9.1 docs, with behaviors re-checked against a live Editor.
 
 ### Requirements
 
@@ -67,18 +67,19 @@ Reopen terminal; verify with `unity --version`. Update with `unity upgrade`.
 ### Usage
 
 - Claude Code: `/unity-pipeline-commands`, or any request that touches the Editor.
-- Unity CLI: `unity command` lists all commands; `unity command <name> [--arg value ...]` executes.
-- Raw HTTP: read `<project>/Library/Pipeline/.unity-pipeline-port` for port + token, then `POST http://127.0.0.1:<port>/api/exec` with `Authorization: Bearer <token>` and body `{"command":"<name>","parameters":{...}}`. Full recipe in its `SKILL.md`.
+- Unity CLI: `unity command` lists command groups, `unity command <group>` lists a group's commands, and `unity command "<group> <name>" [--arg value ...]` executes. With CLI 1.0.0-beta.2, quote the full name.
+- Raw HTTP: read `<project>/Library/Pipeline/.unity-pipeline-port` for port + token, then `POST http://127.0.0.1:<port>/api/exec` with `Authorization: Bearer <token>` and body `{"command":"<group> <name>","parameters":{...}}`. Full recipe in its `SKILL.md`.
 
 ### Contents
 
 | File | Contents |
 |---|---|
-| `SKILL.md` | Connection (CLI + raw HTTP), auth/token semantics, safety conventions (`confirm`/`dry_run`), async fire-and-poll patterns, common workflows, field-tested gotchas |
-| `references/commands-content.md` | Authoring commands: assets & files, scenes, GameObjects & components, prefabs, scripts, animation, materials & shaders |
-| `references/commands-editor.md` | Baking, search & selection, capture, build/compile/tests, project settings, package manager, editor lifecycle & observability, runtime commands, hot reload |
-| `references/connectivity-and-setup.md` | Port descriptors, port ranges, token rotation, endpoints, dev-Player server setup, log locations |
-| `references/extending.md` | Custom `[CliCommand]` authoring, authoring contract, hot-reload authoring, test architecture |
+| `SKILL.md` | Connection (CLI + raw HTTP), token/descriptor lifecycle, readiness (503 busy), detached jobs, safety conventions (`confirm`/`dry_run`), async fire-and-poll patterns, common workflows, field-tested gotchas |
+| `references/commands-content.md` | Authoring commands (generated): assets, scenes, GameObjects & components, prefabs, scripts & method reload, animation, materials |
+| `references/commands-editor.md` | Editor commands (generated): build, capture, console, diagnostics, editor & play mode, jobs (batch/wait), baking, packages, runtime, project settings, tests |
+| `references/connectivity-and-setup.md` | Descriptors, ports, auth, `/api/exec` request forms, readiness, detached jobs, Player server setup, log locations |
+| `references/extending.md` | Custom `[CliGroupCommand]` authoring, authoring contract, method reload (`[MethodReload]`), test architecture |
+| `scripts/gen_command_reference.py` | Regenerates the two command references from a running Editor after a package update |
 
 ### Tested with
 
@@ -86,7 +87,7 @@ Reopen terminal; verify with `unity --version`. Update with `unity upgrade`.
 |---|---|
 | Unity Editor | 6000.3.13f1 (Unity 6) |
 | Unity CLI | 1.0.0-beta.2 |
-| `com.unity.pipeline` | 0.3.1-exp.1 |
+| `com.unity.pipeline` | 0.9.1-exp.1 |
 | OS | Windows 11 Pro |
 
 Both the CLI and the package are experimental betas; expect drift. `unity command` / `GET /api/commands` reflect the installed version.
@@ -94,6 +95,6 @@ Both the CLI and the package are experimental betas; expect drift. `unity comman
 ### Notes
 
 - `com.unity.pipeline` is experimental; commands change between versions. `unity command` / `GET /api/commands` is the source of truth for the installed version.
-- Server binds `127.0.0.1` only, bearer-token auth; token rotates on every domain reload.
-- `eval` executes arbitrary C#. The runtime server is compile-guarded to development builds — do not attempt to enable it in release builds.
-- Known doc corrections baked in: `/api/exec` body key is `parameters` (not `params`); token rotates on play-mode entry; `set_autotick` resets after domain reload; `get_console_logs` may return empty while the game runs (fall back to `Editor.log`).
+- Server binds `127.0.0.1` only, with bearer-token auth. Since 0.9 the token survives domain reloads and play mode, and changes only on Editor restart.
+- `script eval` executes arbitrary C#. The Player server is opt-in per build type (Project Settings → Pipeline → Runtime). Don't enable it for release builds.
+- Verified on 0.9.1: the `/api/exec` body key is `parameters` (`params` is silently ignored for optional args); 0.3 command names fail with a rename hint; the descriptor is deleted during domain reloads; the CLI (beta.2) stops waiting after ~30 s, so use detached jobs (`"job": true`) for long commands.

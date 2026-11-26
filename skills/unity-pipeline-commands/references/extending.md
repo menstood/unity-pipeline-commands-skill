@@ -1,29 +1,41 @@
-# Extending the pipeline: custom commands, hot reload, tests
+# Extending the pipeline: custom commands, method reload, tests (0.9.x)
 
 ## Creating commands
 
-Tag a **static** method with `[CliCommand]`; parameters with `[CliArg]`. `CommandRegistry` auto-discovers via TypeCache (Editor) or reflection (Player) — **no manual registration**; new commands appear after recompile.
+Every command has a **group** and a **name**, and clients run it as `<group> <name>`. Tag a **static** method (any accessibility) with `[CliGroupCommand]`, and its parameters with `[CliArg]`. `CommandRegistry` discovers commands through TypeCache in the Editor and reflection in a Player. There's **no manual registration**: new commands appear after a recompile.
 
 ```csharp
 using Unity.Pipeline.Commands;
 
 public static class MyCommands
 {
-    [CliCommand("my_command", "What this command does")]
-    public static object MyCommand(
+    const string Group = "mytool";
+
+    [CliGroupCommand(Group, "What this command does")]
+    public static object Echo(
         [CliArg("text", "Some input", Required = true)] string text,
         [CliArg("count", "How many times")] int count = 1)
     {
-        return new { echoed = text, count };
+        return new { echoed = text, count };   // -> {"success":true,"result":{...}}
     }
 }
+// unity command "mytool echo" --text hello --count 3
 ```
 
-- `[CliCommand(name, description, MainThreadRequired = true, RuntimeOnly = false)]` — `MainThreadRequired` defaults true (set false only for thread-safe read-only handlers); `RuntimeOnly=true` hides it from Editor listings.
-- `[CliArg(name, description, Required = ..., DefaultValue = ...)]` — `Required` defaults from whether the C# param has a default value.
-- Return: plain `string` (→ `result` field), a typed model extending `CommandExecutionResponse` (e.g. `EvalResponse`), any serializable object (auto-wrapped), or `null`. Envelope fields: `success`, `command`, `result`, `executionTimeMs`, `error`.
-- Multi-field args: DTO implementing `IStructuredCommandInput`, members tagged `[CliArg]` / `[JsonProperty]` / implicit names; use **nullable types** for optional fields.
-- **Failures via exceptions** — never hand-build the response envelope.
+- `[CliGroupCommand(group, description, Name = ..., MainThreadRequired = true, Tags = ...)]`:
+  - `group` is one or more `.`-separated segments (`asset`, `animation.animator`).
+  - The name defaults to the method name in snake_case (`CreateController` → `create_controller`). **Renaming the method renames the command**, which is a breaking change. Use `Name =` only when the derived name is wrong.
+  - `MainThreadRequired` defaults to true. Set it false only for thread-safe, read-only or pollable handlers.
+  - `Tags` are path-style (`"assets/import"`). The `runtime` tag marks Player-targeting commands, which are also kept out of `job batch` on the Editor.
+- `[CliCommand(group, name, description)]`, `[CliCommand("group.sub.name", description)]` (the last `.` splits group from name), or `[CliCommand(name, description)]` (no dot) all work too. The last form puts the command in the `global` group, runnable by its bare name. A method can't carry both attributes.
+- The attributes live in `Unity.Pipeline.Attributes`, which has no define constraints. Response models, `IStructuredCommandInput` and `CommandRegistry` need a reference to `Unity.Pipeline`.
+- `[CliArg(name, description, Required = ..., DefaultValue = ...)]`. `Required` defaults to "the C# parameter has no default". **Parameter declaration order and required-ness are wire API**: raw `argv`/`commandLine` clients bind positionals by order, so append new optional parameters at the end. Enum parameters are validated by name.
+- **Timeouts:** declare `[CliArg("timeout", ...)] double timeoutInSeconds = 600` to change the 60 s default and receive the time left (positive infinity inside a detached job).
+- **Return values:** a `string`, number, anonymous object, typed model, or `null`. The server wraps it in the lean envelope `{success, result}` (plus `error`, `errorDetails` and `warnings` when set; `"verbose": true` adds `command`, `executedAt` and `executionTimeMs`).
+- **Multi-field args:** a DTO implementing `IStructuredCommandInput`. From a command line it's passed as JSON: `--payload '{"name":"x"}'`.
+- **Failures via exceptions.** Never hand-build the envelope.
+- **Dynamic registration:** `CommandRegistry.RegisterCommand(group, name, description, delegate, mainThreadRequired, tags)` and `UnregisterCommand(group, name)`. These are dropped on domain reload and on Play Mode exit, so re-register from `[InitializeOnLoadMethod]`.
+- **Progress:** `CliProgress.Report(title, info, current, total, progress)` shows up in `GET /api/progress` and the CLI's progress bar. `CliEditorProgress.DisplayProgressBar` is a drop-in for `EditorUtility.DisplayProgressBar`.
 
 ## Authoring contract (commands that create/mutate content)
 
@@ -86,8 +98,8 @@ Expose `confirm` (default false) + `dry_run` (default false):
 - `confirm==true` → perform. Non-destructive commands (e.g. `create_folder`) skip both.
 
 ```csharp
-[CliCommand("clear_baked_lighting", "Clear baked lightmap data...")]
-public static object ClearBakedLighting(
+[CliGroupCommand(Group, "Clear baked lightmap data... Destructive: requires confirm=true (use dry_run to preview). Not undoable via Ctrl+Z.")]
+public static object ClearBake(
     [CliArg("confirm", "Apply the clear...")] bool confirm = false,
     [CliArg("dry_run", "Preview what would be cleared...")] bool dryRun = false)
 {
@@ -104,7 +116,7 @@ Management commands (settings/builds/packages) are lighter: unconfined paths all
 
 ### New-command checklist
 
-- Editor-only, lives in `Editor/Commands/<Area>/`, static, `[CliCommand]`-tagged
+- Editor-only, lives in `Editor/Commands/<Area>/` (namespace `Unity.Pipeline.Editor.Commands.<Area>`), static, `[CliGroupCommand]`-tagged with a `const string Group`
 - All paths via `ProjectPaths.Resolve` (never string concatenation)
 - Existing objects as `ObjectRef` via `ObjectResolver.TryResolve`; resolve before mutating
 - Scene mutations inside `AuthoringUndoScope` with the matching `Undo` API
@@ -112,65 +124,39 @@ Management commands (settings/builds/packages) are lighter: unconfined paths all
 - Returns `AuthoringResult` (or model containing `AuthoringResult[]`)
 - Failures via exceptions
 
-## Hot reload
+## Method reload (live code changes)
 
-Apply edited C# to running code without restarting Play mode or rebuilding. **Editor Play Mode + Mono standalone dev builds only — never IL2CPP.**
+Apply edited C# method bodies to running code without restarting Play mode or rebuilding. This replaces 0.3's `[HotReload]`/`[HotReloadWithOverrides]` and the `reload_file*` commands.
 
-> Note: Unity's docs state `[HotReload]` methods must be **public** void instance methods, yet Unity's own samples use default-private methods. Until verified otherwise, follow the stated rule — examples below use `public`.
-
-### Flavor 1 — in-place (`reload_file`)
-
-Tag methods `[HotReload]` (must be **public void instance** methods), edit the body, then:
-
-```
-unity command reload_file "<absolute path>/Spinner.cs"
-unity command reload_file "<absolute path>/Spinner.cs" --pdb
-```
+Tag the method with `[MethodReload]` **before** entering Play mode or building, because the dispatch check is woven in at compile time. The method must be `public` (instance or static) and return `void` or `IEnumerator`.
 
 ```csharp
-using Unity.Pipeline.HotReload;
+using Unity.Pipeline.MethodReload;
+using UnityEngine;
+
 public class Spinner : MonoBehaviour
 {
     public float rotationSpeed = 90f;
 
-    [HotReload]
+    [MethodReload]
     public void Update() => transform.Rotate(Vector3.up, rotationSpeed * Time.deltaTime);
+
+    [OnMethodReloaded]          // optional: runs on every live instance after a reload lands
+    void OnMethodReloaded() { }
 }
 ```
 
-Params: `filename` (req), `timeout` (30000), `assemblyDir` (null), `pdb` (false — emits portable PDB, compiles unoptimized).
+| Command | Backend | Where |
+|---|---|---|
+| `script.methodreload reload <file>` | `Assembly.Load`, full C# | Editor Play mode, Desktop Mono dev builds (needs the runtime HTTP server in a Player). The reloaded body may use **public members only** |
+| `script.methodreload reload_editor <file>` | IlInterpreter, C# subset | Editor. Use it to check an edit stays inside the interpreter's subset |
+| `script.methodreload reload_player <file\|folder> [--player <id>]` | IlInterpreter | Connected dev Players over PlayerConnection, **including IL2CPP**. No HTTP server needed |
 
-### Flavor 2 — override (`reload_file_override`)
-
-Tag `[HotReloadWithOverrides]` and route through the helper; overrides live in a separate file as `public static <Ret> Name(<TargetType> instance, ...)`:
-
-```csharp
-public class BossController : MonoBehaviour
-{
-    [HotReloadWithOverrides]
-    public void Update() => HotReloadHelper.ExecuteWithHotReload(this, "Update", OriginalUpdate);
-    public void OriginalUpdate() => transform.Rotate(45 * Time.deltaTime, 0, 0);
-}
-
-// BossOverrides.cs
-public static class BossOverrides
-{
-    [HotReloadOverrideMethod("BossController.Update")]
-    public static void TweakedUpdate(BossController instance)
-        => instance.transform.Rotate(0, 90 * Time.deltaTime, 0);
-}
-```
-
-Helper overloads: `ExecuteWithHotReload<T>(T instance, string methodName, Func<object>|Action originalMethod, params object[] parameters)`.
-
-### How it works
-
-1. **Roslyn compile** in-memory to IL (+ optional PDB), no disk writes by default.
-2. **Load** via `PipelineUtils.LoadFromBytes` (`UnityEngine.Assemblies.CurrentAssemblies.LoadFromBytes` on 6000.5+, else `Assembly.Load`).
-3. **Dispatch** through `HotReloadRegistry` keyed `TypeName.MethodName`.
-4. `HotReloadInPlaceILPostProcessor` (Mono.Cecil) weaves a dispatch prologue into every `[HotReload]` method at build/compile time.
-
-Support commands: `hotreload_status` (registry stats), `cleanup_hotreload` (remove old assemblies, clear registry).
+- `reload` parameters: `filename` (required), `timeout` (60 s), `assemblyDir` (also save the compiled assembly), `pdb` (portable PDB so breakpoints bind; compiles unoptimized).
+- **The interpreter subset excludes:** `await`/`Task`, `try`/`catch`, `lock`, LINQ query syntax, `decimal`, `dynamic`, reflection types, `ref`/`out` params, generic methods, new type declarations, and static field declarations. Lambdas, closures, string interpolation and coroutine `yield` work. On IL2CPP only unstripped members are callable (`script.methodreload generate_link_xml`, then rebuild).
+- **Reloadable:** new helper methods (not as entry points), delegates and method groups. A reloaded coroutine takes effect on the next `StartCoroutine`.
+- **Watch mode:** Project Settings → Pipeline → Editor → Method Reload Interpreter Watch. Each save reloads automatically into the Editor, or pushes to connected Players. Auto-refresh is off while watching.
+- **Supporting commands:** `script.methodreload status` (which methods have a reload applied) and `script.methodreload cleanup` (revert all and delete saved assemblies).
 
 ## Tests architecture
 
@@ -185,13 +171,13 @@ public void SetTransform_ViaClient_ArrayParams_Apply()
     var go = Track(new GameObject("Xform219_Arrays"));
     using (var server = new PipelineTestServer())
     {
-        var response = server.Execute("set_transform", new {
+        var response = server.Execute(CommandNames.GameobjectSetTransform, new {   // "gameobject set_transform"
             target = new { instanceId = PipelineUtils.GetObjectId(go) },
             position = new[] { 1f, 2f, 3f },
             rotation = new[] { 0f, 90f, 0f },
             scale = new[] { 2f, 2f, 2f }
         });
-        Assert.IsTrue(response.IsSuccess, $"set_transform should succeed: {response.Error}");
+        Assert.IsTrue(response.IsSuccess, $"gameobject set_transform should succeed: {response.Error}");
         Assert.AreEqual(new Vector3(1, 2, 3), go.transform.localPosition);
     }
 }

@@ -1,144 +1,208 @@
-# Editor, build, settings, packages, runtime commands
+# Editor, build, settings, packages, runtime and job commands
 
-Same conventions as commands-content.md: **(req)** = required; standard `confirm`/`dry_run` semantics.
+Generated from the live command schema (`GET /api/commands`) of `com.unity.pipeline` **0.9.1-exp.1** on Unity 6000.3.13f1: 166 commands. Regenerate with `scripts/gen_command_reference.py` after a package update; `unity command <group>` / `GET /api/commands?group=<group>` is the source of truth for the installed version.
 
-## Baking
+Run as `unity command "<group> <name>" --param value` (quote the full name with CLI 1.0.0-beta.2), or raw `POST /api/exec` `{"command": "<group> <name>", "parameters": {...}}`. **(req)** = required; `=x` = default. ObjectRef = `{"path"|"guid"+"fileId"|"instanceId"|"hierarchyPath"|"globalId": ...}`. Destructive commands follow the `confirm`/`dry_run` convention (see SKILL.md).
 
-All bakes are async: trigger returns immediately → poll the matching `*_status` (returns `idle | baking | completed`) → `cancel_*` to abort. Clears are destructive (`confirm:true`, not undoable).
+## `build`
 
-### Lighting
-| Command | Params / Notes |
-|---|---|
-| `bake_lighting` | `confirm` (recommended true — overwrites lightmap data), `dry_run` (validate bakeable scene + return current lighting settings). Uses `Lightmapping.BakeAsync()` |
-| `lighting_bake_status` | → `idle | baking | completed` |
-| `cancel_lighting_bake` | `Lightmapping.Cancel()` |
-| `clear_baked_lighting` | `confirm` (must be true), `include_disk_cache` (default false; also `Lightmapping.ClearDiskCache()`), `dry_run` |
-| `get_lighting_settings` | Lightmapper, bounces, resolution, directional mode, AO, etc. Returns `LightingSettingsResult` |
-| `set_lighting_settings` | `settings` (req, JSON subset, same names/enums as get), `dry_run`. Returns `{ applied[], unknown[] }` |
-
-### NavMesh (legacy)
-| Command | Params / Notes |
-|---|---|
-| `bake_navmesh` | `confirm` (parity only, not required), `dry_run`. Uses `UnityEditor.AI.NavMeshBuilder` |
-| `navmesh_bake_status` / `cancel_navmesh_bake` | |
-| `clear_navmesh` | `confirm` (must be true), `dry_run` |
-| `get_navmesh_settings` / `set_navmesh_settings` | agentRadius/Height/Slope/Climb, minRegionArea, voxelSize. set: `settings` (req), `dry_run` → `{ applied[], unknown[] }` |
-| `bake_navmesh_surfaces` | NavMeshSurface components (AI Navigation package). v1 stub: `package_not_found` if package absent. |
-
-### Occlusion culling
-| Command | Params / Notes |
-|---|---|
-| `bake_occlusion_culling` | `smallest_occluder` (m), `smallest_hole` (m), `backface_threshold` (1–100, lower trims more), `confirm` (parity, not required), `dry_run`. `StaticOcclusionCulling.GenerateInBackground()` |
-| `occlusion_bake_status` / `cancel_occlusion_bake` | |
-| `clear_occlusion_culling` | `confirm` (must be true), `dry_run` |
-
-## Search & selection (read-only / non-destructive, main thread)
-
-| Command | Params / Notes |
-|---|---|
-| `get_selection` | Current Editor selection as structured identities. Returns `SelectionResult` |
-| `set_selection` | `instance_ids` (scene/loaded object IDs) and/or `paths` (asset paths). Returns `SelectionResult` |
-| `search` | `query` (req, Unity Search syntax: `t:Material`, `p: my asset`, `h: Main Camera`), `limit` (default 50, cap 200). Returns `SearchResult` |
-
-## Capture
-
-| Command | Params / Notes |
-|---|---|
-| `capture_game_view` | `width` (default 1280, cap 4096), `height` (default 720, cap 4096), `camera` (name; default Camera.main or first enabled), `save_path` (project-relative). Returns base64 PNG in `CaptureResult` |
-| `capture_scene_view` | `width`, `height`, `save_path`. Active Scene View → PNG (base64) |
-| `capture_editor_element` | `window` (req, EditorWindow type name e.g. `InspectorWindow`, or title), `selector` (req, UI Toolkit: `#name`, `.class`, type, descendant/child chains, `:checked`/`:hover`/`:focus`/`:active`/`:enabled`/`:disabled`/`:not(...)`), `output` (default timestamped under `/Temp/pipeline-screenshots/`). **Unity 6000.7+ only.** Returns `CaptureElementResponse` (path + base64) |
-| `capture_runtime_element` | `panel` (PanelSettings asset or host GO name; optional if exactly one panel), `selector` (req), `output` (default under `Application.persistentDataPath`). RuntimeOnly, **Unity 6000.7+ only** |
-
-Also `screenshot` under Editor lifecycle below (simpler: view name → PNG path).
-
-## Build, compilation & tests
-
-### Build
-| Command | Params / Notes |
-|---|---|
-| `build` | `target` (BuildTarget name; default active), `outputPath`, `profileName` (Build Profile, Unity 6 only), `options` (BuildOptions names: Development, AllowDebugging, ConnectWithProfiler, EnableHeadlessMode, SymlinkSources, BuildAdditionalStreamedScenes, CleanBuildCache, DetailedBuildReport), `scenes` (asset paths), `confirm` (req to execute), `dry_run`. Returns `queued` immediately; an editor tick runs the (blocking) build. One build at a time (`busy` otherwise) |
-| `build_status` | `idle | queued | building | completed`. On completed: full BuildReport — `buildId`, `result` (Succeeded/Failed/Cancelled/Unknown), `platform`, `outputPath`, `totalSizeBytes`, `buildTimeMs`, `buildStartedAt`/`buildEndedAt` (ISO-8601), `totalWarnings`/`totalErrors`, `files` (path/role/sizeBytes), `packedAssets` (needs DetailedBuildReport), `buildSteps`, `errors`/`warnings`. Reads a Temp status file **off-thread, so polling works while the build holds the main thread**. Report retained until next build |
-| `switch_build_target` | `target` (req), `confirm` (req). Destructive + long (full reimport + domain reload). Returns `switching` immediately; `completed` if already on target. Status file survives domain reload |
-| `switch_build_target_status` | `idle | switching | completed` (+ success, activeBuildTarget) |
-| `list_build_targets` | BuildTargetInfo list (name, displayName, targetGroup, isInstalled), sorted; excludes obsolete/sentinel |
-| `get_build_settings` | activeBuildTarget(+Group), developmentBuild, allowDebugging, connectWithProfiler, buildScriptsOnly, symlinkSources, il2CppCodeGeneration, scenes (path/guid/enabled) |
-| `set_build_settings` | `settings` (req: developmentBuild, allowDebugging, connectWithProfiler, buildScriptsOnly, symlinkSources, il2CppCodeGeneration=OptimizeSpeed|OptimizeSize), `confirm`, `dry_run`. Does NOT manage scenes or switch target. Returns applied/skipped maps |
-| `list_build_profiles` | Unity 6 only; BuildProfileInfo (name, guid, platform, isActive); else code `feature_unavailable` |
-
-### Compilation
-| Command | Params / Notes |
-|---|---|
-| `recompile` | Force script recompile (**works while unfocused/minimized**). Successful compile triggers domain reload (token changes!). Poll below |
-| `recompile_status` | `idle | triggered | compiling | completed | up_to_date` |
-
-### Tests
-| Command | Params / Notes |
-|---|---|
-| `list_tests` | `mode` (all/editor/playmode, default all). Returns `TestListResponse` |
-| `run_tests` | `mode` (default all), `filter` (case-insensitive partial), `filter_type` (testName/assembly/category, default testName), `include_explicit` (default false), `async_tests` (default false — synchronous by default), `timeout` (default 300 s). Returns `TestExecutionResponse` |
-| `test_status` | Status of async run |
-| `cancel_tests` | Cancel running execution |
-
-## Project settings
-
-All getters take no params and return `ProjectSettingsResponse`. All setters take `settings` (subset object — omitted fields unchanged), `confirm` (required, refused without), `dry_run`. **Not undoable.**
-
-| Area | Get / Set | Settable fields |
+| Command | Parameters | Description |
 |---|---|---|
-| Audio | `get_audio_settings` / `set_audio_settings` | `volume` (0..1), `rolloffScale`, `dopplerFactor` |
-| Graphics | `get_graphics_settings` / `set_graphics_settings` | `renderPipelineAsset` (ObjectRef to a RenderPipelineAsset) |
-| Input (legacy) | `get_input_settings` / `set_input_settings` | `axis` (req, e.g. `Horizontal`), `sensitivity`, `gravity`, `dead` |
-| Physics | `get_physics_settings` / `set_physics_settings` | `gravityX/Y/Z`, `defaultSolverIterations`, `bounceThreshold` |
-| Player | `get_player_settings` / `set_player_settings` | `companyName`, `productName`, `bundleVersion`, `scriptingBackend` (Mono2x/IL2CPP — **triggers domain reload**), `apiCompatibilityLevel` (NET_Standard_2_0/NET_Unity_4_8 — **domain reload**); read/written against active build target |
-| Quality | `get_quality_settings` / `set_quality_settings` | `level` (index; see levelNames from get), `vSyncCount` (0/1/2), `antiAliasing` (0/2/4/8) |
-| Tags & Layers | `get_tags_layers` / `set_tags_layers` | `addTags`[], `removeTags`[], `setLayers`[] of {`index` 8–31 (0–7 reserved), `name` ("" clears slot)} |
-| Time | `get_time_settings` / `set_time_settings` | `fixedDeltaTime` (e.g. 0.02), `maximumDeltaTime`, `timeScale` (1 = real-time) |
+| `build create_profile` | `name` string **(req)**, `platform` string **(req)**, `subtarget` string, `folder` string, `activate` bool =false, `confirm` bool =false, `dry_run` bool =false | Create a Build Profile asset for a platform (Unity 6 only). Call build list_platforms first to get a platform id. Returns feature_unavailable on earlier versions. |
+| `build get_settings` | — | Read the current build configuration from EditorUserBuildSettings / EditorBuildSettings. |
+| `build list_platforms` | `showAll` bool =false | List the platforms a Build Profile can target, with their platform id (Unity 6 only). Lists only platforms whose build support is installed; pass showAll=true for every known platform. |
+| `build list_profiles` | — | List Build Profile assets in the project (Unity 6 only). Returns feature_unavailable on earlier versions. |
+| `build run` | `target` string, `outputPath` string, `profileName` string, `options` string[], `scenes` string[], `confirm` bool =false, `dry_run` bool =false, `timeout` double =60.0 | Trigger an async Player build and report the full BuildReport. Returns immediately (queued); poll build status until status is 'completed'. DetailedBuildReport is included by default unless 'options' is supplied. Use dry_run to validate without building. |
+| `build set_profile` | `name` string **(req)**, `folder` string, `overrideGlobalScenes` Nullable`1, `scenes` string[], `scriptingDefines` string[], `confirm` bool =false, `dry_run` bool =false | Edit an existing Build Profile's scene list and scripting defines (Unity 6 only). Every setting is optional; only the ones supplied change. The platform cannot be changed here: recreate the profile with build create_profile and confirm=true. Returns feature_unavailable on earlier versions. |
+| `build set_settings` | `settings` SetBuildSettingsInput, `confirm` bool =false, `dry_run` bool =false | Set mutable EditorUserBuildSettings fields. Does NOT manage scenes (use scene add_to_build / scene remove_from_build) or switch target (use build.target switch). Use dry_run to preview. |
+| `build status` | — | Status of the current/most recent build: idle \| queued \| building \| completed, with the full BuildReport (files, packedAssets, buildSteps, errors, warnings) once completed. Retained until the next build. |
 
-## Package Manager (UPM)
+## `build.target`
 
-Registry queries block up to a **25 s timeout**. Add/remove are async by default (`in_progress` → poll `package_status`), `wait:true` blocks. A successful add/remove triggers recompile/domain reload — poll `recompile_status` and expect a **new evalToken**. `busy` if another op is in flight.
+| Command | Parameters | Description |
+|---|---|---|
+| `build.target list` | — | List the known BuildTarget values with their group and whether build support is installed. |
+| `build.target switch` | `target` string **(req)**, `confirm` bool =false, `timeout` double =60.0 | Switch the active build target (destructive, long-running: triggers a full reimport + domain reload). Requires confirm=true. Returns immediately; poll build.target switch_status. |
+| `build.target switch_status` | — | Status of the last target switch: idle \| switching \| completed (with success + activeBuildTarget). |
 
-| Command | Params / Notes |
-|---|---|
-| `package_list` | `scope` (installed/available/all, default installed), `include_indirect` (default true), `offline` (default false) |
-| `package_search` | `query` (name e.g. com.unity.foo; omit = all), `offline` (default false). Results flag installed state |
-| `package_add` | `identifier` (req: `com.unity.foo@1.2.3`, git URL, or `file:../Path`), `confirm` (req), `dry_run`, `wait` (default false) |
-| `package_remove` | `name` (req), `confirm` (req), `dry_run`, `wait`. Reload can drop the synchronous reply — `package_status` confirms the outcome |
-| `package_resolve` | Fire-and-forget (`Client.Resolve()` on a later tick; response returns before any reload). May trigger recompile/domain reload; outcome recorded in status file |
-| `package_status` | `idle | in_progress | completed | failed` + added package, manifest, error. Temp status file **survives domain reload** — recover lost replies by polling. `{"status":"idle"}` if nothing ran |
+## `capture`
 
-## Editor lifecycle & observability
+| Command | Parameters | Description |
+|---|---|---|
+| `capture game_view` | `width` int =1280, `height` int =720, `camera` string, `save_path` string, `include_inline_image` bool =false, `max_resolution` int =0, `source` string | Capture the game view as a PNG. source=screen (default) captures what the Game window shows, incl. Screen Space - Overlay UI; source=camera renders a single camera instead and misses overlay UI. Returns it inline as base64, unless save_path is set (path-only result; pass include_inline_image=true to get both). |
+| `capture scene_view` | `width` int =1280, `height` int =720, `save_path` string, `include_inline_image` bool =false, `max_resolution` int =0 | Render the active Scene View to a PNG. Returns it inline as base64, unless save_path is set (path-only result; pass include_inline_image=true to get both). |
+| `capture screenshot` | `view` string =game, `output` string, `width` int =0, `height` int =0 | Capture the Scene or Game view as a PNG and return its file path |
 
-| Command | Params / Notes |
-|---|---|
-| `editor_play` / `editor_stop` / `editor_pause` | Enter / exit / pause Play mode. Return string |
-| `editor_status` | Detailed editor state. Returns `StatusResponse` |
-| `editor_focus` | Bring the Editor window to foreground |
-| `menu` | `path` (e.g. `Assets/Reimport All`; **omit to list all available menu items**). Returns `MenuResponse` |
-| `screenshot` | `view` (`game` default, or `scene`), `output` (default timestamped under `/Temp/pipeline-screenshots/`), `width`/`height` (0 = current camera size). Returns `ScreenshotResponse` (file path) |
-| `set_autotick` | `enable` (default true), `interval_ms` (default 16; 0 = every update). Forces `EditorApplication.SignalTick` while unfocused. **Static state, resets/off after domain reload** |
-| `get_console_logs` | `severity` (all/log/warning/error, default all), `limit` (default 100, cap 1000, most-recent first). Structured |
-| `clear_console` | Clears captured buffer + Unity console |
-| `get_performance_stats` | Render, memory, frame-timing stats (read-only). Returns `PerformanceStats` |
-| `get_authoring_root` / `set_authoring_root` | Get/set base folder under `Assets/` for bare authoring paths (`root` req; use `Assets` for full project access) |
+## `console`
 
-## Runtime / player commands (+ eval & hot reload)
+| Command | Parameters | Description |
+|---|---|---|
+| `console clear` | — | Clear the captured log buffer and the Unity Editor console. |
+| `console get` | `tail` int =100, `level` string =log, `since` long =-1, `since_session` string | Get captured Unity console output (Editor or Player; supports tail, level filtering, and follow via a cursor) |
+| `console status` | — | Console ground truth and buffer counters without pulling entries: compile-failure flag, Editor console counts, and the buffer's retained counts and cursor. |
+| `console write` | `message` string **(req)**, `level` string =info | Write a message to Unity console |
 
-`RuntimeOnly` = only listed on the runtime (Player) server unless noted.
+## `diagnostics`
 
-| Command | Params / Notes |
-|---|---|
-| `runtime_status` | Comprehensive app status. RuntimeOnly. Returns `RuntimeStatusResponse` |
-| `quit` | `exitCode` (default 0). Graceful quit. RuntimeOnly |
-| `set_target_framerate` | `frameRate` (req; -1 platform default, 0 unlimited). RuntimeOnly |
-| `set_timescale` | `scale` (req; 0.0 pause, 1.0 normal). RuntimeOnly |
-| `simulate_key` | `key` (req, Input System Key name e.g. Space, W, Enter), `action` (down/up/press, default press). RuntimeOnly; requires Input System (`ENABLE_INPUT_SYSTEM`). Note: only drives the new Input System — games on legacy `Input` will not receive simulated events |
-| `simulate_pointer` | `x`, `y` (req, screen px, origin bottom-left), `action` (move/down/up/click, default click), `button` (left/right/middle). RuntimeOnly; Input System required |
-| `log` | `message` (req), `level` (info/warning/error). Write to Unity console. RuntimeOnly |
-| `console` | `tail` (default 100), `level` (min severity log/warn/error, default log), `since` (cursor, default -1 — follow mode). **Editor AND player.** Returns `ConsoleLogResponse` |
-| `eval` | `code` (req, C# via Roslyn), `timeout` (default 5000 ms). **Editor AND runtime.** Returns `EvalResponse` |
-| `eval_file` | `file` (req, `.cs` path), `timeout` (default 5000). Missing file / wrong extension / empty → Bad Request |
-| `reload_file` | `filename` (req), `timeout` (default 30000), `assemblyDir`, `pdb` (default false). In-place `[HotReload]` edits — see extending.md |
-| `reload_file_override` | `filename` (req), `timeout`, `assemblyDir`. `[HotReloadWithOverrides]` flavor |
-| `hotreload_status` | Registry stats. RuntimeOnly |
-| `cleanup_hotreload` | `assemblyDir` (req), `force_domain_reload` (default true). RuntimeOnly |
+| Command | Parameters | Description |
+|---|---|---|
+| `diagnostics audit_status` | — | Get the status of the last audit: idle \| scanning \| completed \| failed \| interrupted \| unavailable. |
+| `diagnostics get_performance` | — | Read render, memory, and frame-timing stats (structured, read-only). |
+| `diagnostics report_evals` | `top` int =50 | Aggregate local eval-usage telemetry into a ranked report: API fingerprint frequency, one-liner percentage, error rate, and command-coverage suggestions. |
+| `diagnostics run_audit` | `categories` string, `output` string | Run a Project Auditor static-analysis scan. Returns immediately; poll diagnostics audit_status until status is 'completed', then read the CSV. |
+
+## `editor`
+
+| Command | Parameters | Description |
+|---|---|---|
+| `editor focus` | — | Bring the Unity Editor window to the foreground |
+| `editor invoke_menu` | `path` string | Execute an Editor menu item by path, or list available items when no path is given |
+| `editor save_all` | — | Save all open scenes that have unsaved changes. |
+| `editor search` | `query` string **(req)**, `limit` int =50 | Run a Unity Search query and return structured results. |
+| `editor set_auto_tick` | `enable` bool =true, `interval_ms` int =16, `persist` bool =true | Keep the editor ticking while unfocused by forcing EditorApplication.SignalTick at a throttled rate |
+| `editor status` | — | Get detailed Unity Editor status and state information |
+
+## `editor.playmode`
+
+| Command | Parameters | Description |
+|---|---|---|
+| `editor.playmode list_instances` | — | List running Editor instances reachable over Pipeline (this Editor + its MPPM virtual player clones). Connect to one with 'unity command --project-path <its projectPath>'. |
+| `editor.playmode pause` | — | Toggle pause state of Unity Editor play mode |
+| `editor.playmode set_run_in_background` | `enable` bool =true | Override the project's Run In Background Player Setting, recording enough state to restore it later and to keep it out of builds |
+| `editor.playmode start` | — | Enter Unity Editor play mode |
+| `editor.playmode stop` | — | Exit Unity Editor play mode |
+
+## `job`
+
+| Command | Parameters | Description |
+|---|---|---|
+| `job batch` | `operations` List`1 **(req)**, `transactional` bool =true, `on_error` string =abort, `dry_run` bool =false, `result_fields` JObject, `timeout` double =60.0 | Run multiple registered commands in one transactional request. Later ops can reference earlier results with "$<id-or-index>.<jsonPath>" (e.g. "$0.instanceId"; "$$" escapes a literal '$'). transactional=true (default) groups every op into one Undo step and reverts all applied ops if any op fails; commands that mutate outside the Undo system (asset/file/settings writes) are rejected unless transactional=false. on_error=abort\|continue (continue forces transactional=false); dry_run validates without mutating; timeout (seconds, default 60) bounds execution — when it is about to run out the remaining ops are skipped and a transactional batch rolls back (submit long batches with "job": true). Excludes build run, build.target switch, the package commands, editor.playmode start/stop/pause, script recompile, script eval, script eval_file, script run, editor invoke_menu, scene open/scene create, async commands (test run/test list), runtime-only commands, and nested job batch. |
+| `job wait` | `condition` WaitConditionInput **(req)**, `timeout` double =30.0, `poll_interval_ms` double =100.0, `on_met` WaitOnMetInput, `return_history` bool =false, `tolerate_missing` bool =false, `async` bool =false | Wait server-side until a member condition holds, then optionally act in the same frame. Sync waits hold the exec queue (every other command waits behind them, including one the condition may depend on) — keep them short and self-contained; set async=true and poll job wait_status for anything else. |
+| `job wait_cancel` | `wait_id` string **(req)** | Cancel an async wait started with job wait (async=true). |
+| `job wait_status` | `wait_id` string **(req)** | Get the status/result of an async wait started with job wait (async=true). |
+
+## `lighting`
+
+| Command | Parameters | Description |
+|---|---|---|
+| `lighting bake` | `confirm` bool =false, `dry_run` bool =false | Trigger an async lightmap bake of the open scene(s) via Lightmapping.BakeAsync(). Returns immediately; poll lighting bake_status until completed. |
+| `lighting bake_status` | — | Get the status of the last lighting bake: idle \| baking \| completed. |
+| `lighting cancel_bake` | — | Cancel an in-progress lighting bake (Lightmapping.Cancel()). |
+| `lighting clear_bake` | `confirm` bool =false, `include_disk_cache` bool =false, `dry_run` bool =false | Clear baked lightmap data for the open scene(s). Destructive: requires confirm=true. |
+| `lighting get_settings` | — | Read the active LightingSettings (lightmapper, bounces, resolution, directional mode, AO, etc.). |
+| `lighting set_settings` | `settings` JObject **(req)**, `dry_run` bool =false | Apply a subset of lighting settings to the active LightingSettings. Returns { applied[], unknown[] }. |
+
+## `navmesh`
+
+| Command | Parameters | Description |
+|---|---|---|
+| `navmesh bake` | `confirm` bool =false, `dry_run` bool =false | Trigger an async legacy NavMesh bake of the open scene(s) via UnityEditor.AI.NavMeshBuilder. Returns immediately; poll navmesh bake_status until completed. |
+| `navmesh bake_status` | — | Get the status of the last NavMesh bake: idle \| baking \| completed. |
+| `navmesh bake_surfaces` | — | Bake NavMeshSurface components (AI Navigation package). v1 stub: returns package_not_found when the package is absent. |
+| `navmesh cancel_bake` | — | Cancel an in-progress NavMesh bake (NavMeshBuilder.Cancel()). |
+| `navmesh clear_bake` | `confirm` bool =false, `dry_run` bool =false | Clear the baked NavMesh for the open scene(s). Destructive: requires confirm=true. |
+| `navmesh get_settings` | — | Read the default agent's legacy NavMesh bake settings (agentRadius/Height/Slope/Climb, minRegionArea, voxelSize). |
+| `navmesh set_settings` | `settings` JObject **(req)**, `dry_run` bool =false | Apply a subset of legacy NavMesh bake settings to the default agent. Returns { applied[], unknown[] }. |
+
+## `occlusion`
+
+| Command | Parameters | Description |
+|---|---|---|
+| `occlusion bake` | `smallest_occluder` float =-3.40282347e+38, `smallest_hole` float =-3.40282347e+38, `backface_threshold` float =-3.40282347e+38, `confirm` bool =false, `dry_run` bool =false | Trigger an async occlusion-culling bake of the open scene(s) via StaticOcclusionCulling.GenerateInBackground(). Returns immediately; poll occlusion bake_status until completed. |
+| `occlusion bake_status` | — | Get the status of the last occlusion bake: idle \| baking \| completed. |
+| `occlusion cancel_bake` | — | Cancel an in-progress occlusion bake (StaticOcclusionCulling.Cancel()). |
+| `occlusion clear_bake` | `confirm` bool =false, `dry_run` bool =false | Clear baked occlusion-culling data for the open scene(s). Destructive: requires confirm=true. |
+
+## `package`
+
+| Command | Parameters | Description |
+|---|---|---|
+| `package add` | `identifier` string **(req)**, `confirm` bool =false, `dry_run` bool =false, `wait` bool =false, `timeout` double =300.0 | Add a UPM package by name@version, git URL, or 'file:' local path. Async by default (returns in_progress; poll package status); pass wait=true to block until added. A recompile/domain reload follows — poll script recompile_status. Requires confirm=true; use dry_run to preview. |
+| `package list` | `scope` string =installed, `include_indirect` bool =true, `offline` bool =false, `timeout` double =60.0 | List packages by scope: installed (default) \| available (registry) \| all (both). Returns the full result synchronously — available/all block until the registry query completes. |
+| `package remove` | `name` string **(req)**, `confirm` bool =false, `dry_run` bool =false, `wait` bool =false, `timeout` double =300.0 | Remove a UPM package by name. Async by default (returns in_progress; poll package status); pass wait=true to block until removed. A recompile/domain reload follows — poll script recompile_status. Requires confirm=true; use dry_run to preview. |
+| `package resolve` | — | Resolve/refresh packages from the manifest (re-fetch and re-link). May trigger a recompile/domain reload — poll script recompile_status. Its outcome is recorded for package status. |
+| `package search` | `query` string, `offline` bool =false, `timeout` double =60.0 | Search packages available in the registry. Provide a name (e.g. com.unity.foo) or omit to list all. Returns the full result synchronously (blocks until the registry query completes). |
+| `package status` | — | Status of the last async package operation (add/remove/resolve): idle \| in_progress \| completed \| failed, with the added package, manifest, and any error. |
+
+## `runtime`
+
+| Command | Parameters | Description |
+|---|---|---|
+| `runtime quit` | `exitCode` int =0 | Gracefully quit the Unity application |
+| `runtime set_target_frame_rate` | `frameRate` int **(req)** | Set the target frame rate for the application |
+| `runtime set_time_scale` | `scale` float **(req)** | Set the time scale for the application |
+| `runtime simulate_key` | `key` string **(req)**, `action` string =press | Simulate a keyboard key event (Input System). Drives the running app. |
+| `runtime simulate_pointer` | `x` float **(req)**, `y` float **(req)**, `action` string =click, `button` string =left | Simulate a mouse/pointer event at screen coordinates (Input System). |
+| `runtime status` | — | Get comprehensive runtime application status |
+
+## `settings.audio`
+
+| Command | Parameters | Description |
+|---|---|---|
+| `settings.audio get` | — | Read project Audio settings (volume, rolloff scale, doppler factor). |
+| `settings.audio set` | `settings` AudioSettingsInput, `confirm` bool =false, `dry_run` bool =false | Change project Audio settings. Requires confirm=true; use dry_run to preview. Not undoable via Ctrl+Z. |
+
+## `settings.graphics`
+
+| Command | Parameters | Description |
+|---|---|---|
+| `settings.graphics get` | — | Read GraphicsSettings (default render pipeline). |
+| `settings.graphics set` | `settings` GraphicsSettingsInput, `confirm` bool =false, `dry_run` bool =false | Set the default render pipeline asset. Requires confirm=true; use dry_run to preview. Not undoable via Ctrl+Z. |
+
+## `settings.input`
+
+| Command | Parameters | Description |
+|---|---|---|
+| `settings.input get` | — | Read the legacy Input Manager axes (names and count). |
+| `settings.input set` | `settings` InputAxisInput, `confirm` bool =false, `dry_run` bool =false | Tune a legacy Input Manager axis (sensitivity/gravity/dead) by name. Requires confirm=true; use dry_run to preview. Not undoable via Ctrl+Z. |
+
+## `settings.physics`
+
+| Command | Parameters | Description |
+|---|---|---|
+| `settings.physics get` | — | Read Physics settings (gravity, solver iterations, bounce threshold). |
+| `settings.physics set` | `settings` PhysicsSettingsInput, `confirm` bool =false, `dry_run` bool =false | Change Physics settings. Requires confirm=true; use dry_run to preview. Not undoable via Ctrl+Z. |
+
+## `settings.player`
+
+| Command | Parameters | Description |
+|---|---|---|
+| `settings.player get` | — | Read PlayerSettings (company/product/version, scripting backend, API level). |
+| `settings.player set` | `settings` PlayerSettingsInput, `confirm` bool =false, `dry_run` bool =false | Change PlayerSettings. Requires confirm=true; use dry_run to preview. Not undoable via Ctrl+Z. Scripting backend / API level changes trigger a domain reload. |
+
+## `settings.quality`
+
+| Command | Parameters | Description |
+|---|---|---|
+| `settings.quality get` | — | Read QualitySettings (current level, level names, vSync, anti-aliasing). |
+| `settings.quality set` | `settings` QualitySettingsInput, `confirm` bool =false, `dry_run` bool =false | Change QualitySettings. Requires confirm=true; use dry_run to preview. Not undoable via Ctrl+Z. |
+
+## `settings.runtime_pipeline`
+
+| Command | Parameters | Description |
+|---|---|---|
+| `settings.runtime_pipeline get` | — | Read Pipeline Runtime settings (enableInDevelopmentBuilds, enableInReleaseBuilds, port, enableAuditLogging, autoStart, maxWorkItemsPerFrame). Reports the settings in effect, falling back to built-in defaults when none have been authored; never creates the settings file. The two toggles are reported for the active build target. |
+| `settings.runtime_pipeline set` | `settings` RuntimePipelineSettingsInput, `confirm` bool =false, `dry_run` bool =false | Change Pipeline Runtime settings. Requires confirm=true; use dry_run to preview. Not undoable via Ctrl+Z. Refused while in Play Mode: the running driver already loaded its own settings, so a change would silently not apply until the next Play session or build. port and maxWorkItemsPerFrame are rejected outright if outside the same bounds the Project Settings page enforces. |
+
+## `settings.tags_layers`
+
+| Command | Parameters | Description |
+|---|---|---|
+| `settings.tags_layers get` | — | Read the project's tags and (named) layers. |
+| `settings.tags_layers set` | `settings` TagsLayersInput, `confirm` bool =false, `dry_run` bool =false | Add/remove tags and assign user layer names (index 8-31). Requires confirm=true; use dry_run to preview. Not undoable via Ctrl+Z. |
+
+## `settings.time`
+
+| Command | Parameters | Description |
+|---|---|---|
+| `settings.time get` | — | Read Time settings (fixedDeltaTime, maximumDeltaTime, timeScale). |
+| `settings.time set` | `settings` TimeSettingsInput, `confirm` bool =false, `dry_run` bool =false | Change Time settings. Requires confirm=true; use dry_run to preview. Not undoable via Ctrl+Z. |
+
+## `test`
+
+| Command | Parameters | Description |
+|---|---|---|
+| `test cancel` | — | Cancel running test execution |
+| `test list` | `mode` string =all | List all available tests (EditMode and/or PlayMode) without running them |
+| `test run` | `mode` string =all, `filter` string, `filter_type` string =testName, `include_explicit` bool =false, `async_tests` bool =false, `timeout` double =600.0 | Execute Unity tests with filtering options |
+| `test status` | — | Get status of running async test execution |
